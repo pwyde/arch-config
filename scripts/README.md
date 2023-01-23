@@ -1,16 +1,7 @@
-### Scripts to install on different rootfs
+# Description
 
-For each:
+## Install scripts
+[Install](/scripts/zfs/install/) scripts will configure and install Arch Linux with ZFS on root.
 
-``01-configure.sh`` will 
-- Create partition scheme
-- Format everything
-- Mount partitions
-
-``02-install.sh`` will
-- Configure mirrors
-- Install Arch Linux and kernel
-- Generate initramfs
-- Configure hostname, locales, keymap, network
-- Install and configure bootloader
-- Generate users and passwords
+## Recover scripts
+[Recover](/scripts/zfs/recover/) scripts can be used to troubleshoot/recover a failed installation.
