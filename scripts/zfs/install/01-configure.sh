@@ -28,14 +28,23 @@ tests () {
         ping archlinux.org -c 1 > /dev/null &&    \
         timedatectl set-ntp true > /dev/null &&   \
         modprobe zfs &&                           \
-        print "Tests ok"
+        print "Tests OK!"
+}
+
+# Identify if system is virtual
+id_vm () {
+    if [[ $(systemd-detect-virt | grep 'kvm') == kvm ]]; then
+        DEVPATH="/dev/disk/by-path"
+    else
+        DEVPATH="/dev/disk/by-id"
+    fi
 }
 
 select_disk () {
     # Set DISK
-    select ENTRY in $(ls /dev/disk/by-id/);
+    select ENTRY in $(ls "$DEVPATH");
     do
-        DISK="/dev/disk/by-id/$ENTRY"
+        DISK="$DEVPATH/$ENTRY"
         echo "$DISK" > /tmp/disk
         echo "Installing on $ENTRY."
         break
@@ -43,32 +52,31 @@ select_disk () {
 }
 
 wipe () {
-    ask "Do you want to wipe all datas on $ENTRY ?"
-    if [[ $REPLY =~ ^[Yy]$ ]]
-    then
+    ask "Do you want to wipe all data on $ENTRY ?"
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         # Clear disk
         dd if=/dev/zero of="$DISK" bs=512 count=1
-        wipefs -af "$DISK"
-        sgdisk -Zo "$DISK"
+        wipefs --all --force "$DISK"
+        sgdisk --zap-all --clear "$DISK"
     fi
 }
 
 partition () {
     # EFI part
-    print "Creating EFI part"
-    sgdisk -n1:1M:+512M -t1:EF00 "$DISK"
+    print "Creating EFI partition"
+    sgdisk -n1:1M:+1G -t1:EF00 "$DISK"
     EFI="$DISK-part1"
     
     # ZFS part
-    print "Creating ZFS part"
-    sgdisk -n3:0:0 -t3:bf01 "$DISK"
+    print "Creating ZFS partition"
+    sgdisk -n2:0:0 -t2:bf00 "$DISK"
     
     # Inform kernel
     partprobe "$DISK"
     
     # Format efi part
     sleep 1
-    print "Format EFI part"
+    print "Format EFI partition"
     mkfs.vfat "$EFI"
 }
 
@@ -83,7 +91,7 @@ zfs_passphrase () {
 
 create_pool () {
     # ZFS part
-    ZFS="$DISK-part3"
+    ZFS="$DISK-part2"
     
     # Create ZFS pool
     print "Create ZFS pool"
@@ -118,6 +126,14 @@ create_system_dataset () {
     print "Create slash dataset"
     zfs create -o mountpoint=/ -o canmount=noauto zroot/ROOT/"$1"
 
+    print "Create system datasets"
+    zfs create -o mountpoint=/var -o canmount=off     zroot/var
+    zfs create                                        zroot/var/cache
+    zfs create                                        zroot/var/log
+    zfs create -o mountpoint=/var/lib -o canmount=off zroot/var/lib
+    zfs create                                        zroot/var/lib/libvirt
+    
+
     # Generate zfs hostid
     print "Generate hostid"
     zgenhostid
@@ -127,13 +143,14 @@ create_system_dataset () {
     zpool set bootfs="zroot/ROOT/$1" zroot
 
     # Manually mount slash dataset
-    zfs mount zroot/ROOT/"$1"
+    #zfs mount zroot/ROOT/"$1"
 }
 
 create_home_dataset () {
-    print "Create home dataset"
-    zfs create -o mountpoint=/ -o canmount=off zroot/data
-    zfs create                                 zroot/data/home
+    print "Create home datasets"
+    zfs create -o mountpoint=none   zroot/data
+    zfs create -o mountpoint=/home  zroot/data/home
+    zfs create -o mountpoint=/root  zroot/data/home/root
 }
 
 export_pool () {
@@ -143,17 +160,17 @@ export_pool () {
 
 import_pool () {
     print "Import zpool"
-    zpool import -d /dev/disk/by-id -R /mnt zroot -N -f
+    zpool import -d "$DEVPATH" -R /mnt zroot -N -f
     zfs load-key zroot
 }
 
 mount_system () {
-    print "Mount slash dataset"
+    print "Mount datasets"
     zfs mount zroot/ROOT/"$1"
     zfs mount -a
     
     # Mount EFI part
-    print "Mount EFI part"
+    print "Mount EFI partition"
     EFI="$DISK-part1"
     mkdir -p /mnt/efi
     mount "$EFI" /mnt/efi
@@ -161,24 +178,23 @@ mount_system () {
 
 copy_zpool_cache () {
     # Copy ZFS cache
-    print "Generate and copy zfs cache"
+    print "Generate and copy ZFS cache"
     mkdir -p /mnt/etc/zfs
     zpool set cachefile=/etc/zfs/zpool.cache zroot
 }
 
 # Main
-
 tests
+id_vm
 
-print "Is this the first install or a second install to dualboot ?"
+print "Is this the first install or a second install to dualboot?"
 install_reply=$(menu first dualboot)
 
 select_disk
 zfs_passphrase
 
 # If first install
-if [[ $install_reply == "first" ]]
-then
+if [[ $install_reply == "first" ]]; then
     # Wipe the disk
     wipe
     # Create partition table
@@ -189,19 +205,17 @@ then
     create_root_dataset
 fi
 
-ask "Name of the slash dataset ?"
+ask "Name of the slash dataset?"
 name_reply="$REPLY"
 echo "$name_reply" > /tmp/root_dataset
 
-if [[ $install_reply == "dualboot" ]]
-then
+if [[ $install_reply == "dualboot" ]]; then
     import_pool
 fi
 
 create_system_dataset "$name_reply"
 
-if [[ $install_reply == "first" ]]
-then
+if [[ $install_reply == "first" ]]; then
     create_home_dataset
 fi
 
@@ -211,4 +225,4 @@ mount_system "$name_reply"
 copy_zpool_cache
 
 # Finish
-echo -e "\e[32mAll OK"
+echo -e "\e[32mAll OK!"

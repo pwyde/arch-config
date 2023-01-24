@@ -15,9 +15,16 @@ print () {
     echo -e "\n\033[1m> $1\033[0m\n"
     if [[ -n "$debug" ]]
     then
-      read -rp "press enter to continue"
+      read -rp "Press enter to continue..."
     fi
 }
+
+# Identify if system is virtual
+if [[ $(systemd-detect-virt | grep 'kvm') == kvm ]]; then
+  DEVPATH="/dev/disk/by-path"
+else
+  DEVPATH="/dev/disk/by-id"
+fi
 
 # Root dataset
 root_dataset=$(cat /tmp/root_dataset)
@@ -34,96 +41,159 @@ pacstrap /mnt       \
   linux-lts         \
   linux-lts-headers \
   linux-firmware    \
-  intel-ucode       \
+  man-db            \
+  man-pages         \
   efibootmgr        \
+  nano              \
   vim               \
-  git               \
-  ansible           \
-  iwd               \
-  wpa_supplicant
+  bash-completion   \
+  terminus-font     \
+  git
+
+# Fix the “warning: directory permissions differ on /mnt/root/ filesystem: 755
+# package: 750” message during pacstrap.
+chmod 750 /mnt/root
+# Fix the "warning: directory permissions differ on /mnt/var/tmp/ filesystem: 755
+# package: 1777" message during pacstrap.
+chmod 1777 /mnt/var/tmp
 
 # Generate fstab excluding ZFS entries
 print "Generate fstab excluding ZFS entries"
-genfstab -U /mnt | grep -v "zroot" | tr -s '\n' | sed 's/\/mnt//'  > /mnt/etc/fstab
+echo "# <file system>         <dir>           <type>          <options>                                                                                          <dump> <pass>" > /mnt/etc/fstab
+genfstab -U /mnt | grep -v "zroot" | tr -s '\n' | sed 's/\/mnt//'  >> /mnt/etc/fstab
 
 # Set hostname
-read -r -p 'Please enter hostname : ' hostname
+read -r -p 'Enter hostname: ' hostname
 echo "$hostname" > /mnt/etc/hostname
 
 # Configure /etc/hosts
+read -r -p 'Enter domain name: ' domainname
 print "Configure hosts file"
 cat > /mnt/etc/hosts <<EOF
-#<ip-address>	<hostname.domain.org>	<hostname>
-127.0.0.1	    localhost   	        $hostname
-::1   		    localhost              	$hostname
+#<ip-address>	<hostname.domain.tld>      <hostname>
+127.0.0.1     $hostname.$domainname $hostname
+::1           $hostname.$domainname $hostname
 EOF
 
 # Prepare locales and keymap
 print "Prepare locales and keymap"
-echo "KEYMAP=fr" > /mnt/etc/vconsole.conf
-sed -i 's/#\(fr_FR.UTF-8\)/\1/' /mnt/etc/locale.gen
-echo 'LANG="fr_FR.UTF-8"' > /mnt/etc/locale.conf
+cat > /mnt/etc/vconsole.conf <<EOF
+KEYMAP=sv-latin1
+FONT=ter-116n
+EOF
+sed -i 's/#\(en_US.UTF-8\)/\1/' /mnt/etc/locale.gen
+sed -i 's/#\(en_GB.UTF-8\)/\1/' /mnt/etc/locale.gen
+sed -i 's/#\(sv_SE.UTF-8\)/\1/' /mnt/etc/locale.gen
+cat > /mnt/etc/locale.conf <<EOF
+# Determines the default locale in the absence of other locale related environment variables.
+LANG=en_GB.UTF-8
+# Format of interactive words and responses.
+LC_MESSAGES=en_GB.UTF-8
+# Character classification and case conversion.
+LC_CTYPE=sv_SE.UTF-8
+# Numeric formatting.
+LC_NUMERIC=sv_SE.UTF-8
+# Date and time formats.
+LC_TIME=sv_SE.UTF-8
+# Monetary formatting.
+LC_MONETARY=sv_SE.UTF-8
+# Default measurement system used within the region.
+LC_MEASUREMENT=sv_SE.UTF-8
+# Convention used for formatting of street or postal addresses.
+LC_ADDRESS=sv_SE.UTF-8
+# Conventions used for representation of telephone numbers.
+LC_TELEPHONE=sv_SE.UTF-8
+# Default paper size for region.
+LC_PAPER=sv_SE.UTF-8
+# Collation order.
+LC_COLLATE=sv_SE.UTF-8
+EOF
 
 # Prepare initramfs
 print "Prepare initramfs"
-cat > /mnt/etc/mkinitcpio.conf <<"EOF"
-MODULES=(i915 intel_agp)
-BINARIES=()
-FILES=(/etc/zfs/zroot.key)
-HOOKS=(base udev autodetect modconf block keyboard keymap zfs filesystems)
-COMPRESSION="zstd"
-EOF
+sed -i "s/HOOKS=.*/HOOKS=(base udev autodetect modconf block keyboard keymap consolefont zfs filesystems)/g" /mnt/etc/mkinitcpio.conf
+sed -i "s/BINARIES=.*/BINARIES=(setfont)/g" /mnt/etc/mkinitcpio.conf
+sed -i 's/#\(COMPRESSION="zstd"\)/\1/' /mnt/etc/mkinitcpio.conf
+sed -i "s/FILES=.*/FILES=(\/etc\/zfs\/zroot.key)/g" /mnt/etc/mkinitcpio.conf
 
-cat > /mnt/etc/mkinitcpio.d/linux-lts.preset <<"EOF"
+cat > /mnt/etc/mkinitcpio.d/linux-lts.preset <<EOF
+# mkinitcpio preset file for the 'linux-lts' package
+
 ALL_config="/etc/mkinitcpio.conf"
 ALL_kver="/boot/vmlinuz-linux-lts"
+
 PRESETS=('default')
+
+#default_config="/etc/mkinitcpio.conf"
 default_image="/boot/initramfs-linux-lts.img"
+#default_options=""
+
+#fallback_config="/etc/mkinitcpio.conf"
+#fallback_image="/boot/initramfs-linux-lts-fallback.img"
+#fallback_options="-S autodetect"
 EOF
+
+# Configure username
+print 'Set regular username'
+read -r -p "Username: " user
+
+# Create ZFS dataset for user
+zfs create zroot/data/home/"$user"
 
 print "Copy ZFS files"
 cp /etc/hostid /mnt/etc/hostid
 cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
 cp /etc/zfs/zroot.key /mnt/etc/zfs
 
-### Configure username
-print 'Set your username'
-read -r -p "Username: " user
-
 # Chroot and configure
 print "Chroot and configure system"
 
 arch-chroot /mnt /bin/bash -xe <<EOF
 
-  ### Reinit keyring
-  # As keyring is initialized at boot, and copied to the install dir with pacstrap, and ntp is running
-  # Time changed after keyring initialization, it leads to malfunction
-  # Keyring needs to be reinitialised properly to be able to sign archzfs key.
+  # Configure pacman
+  sed -i "/Color/s/^#//" /etc/pacman.conf
+  sed -i "s/#\[multilib\]/[multilib]/" /etc/pacman.conf
+  sed -i "/\[multilib\]$/{n;s/^#//;}" /etc/pacman.conf
+  pacman -Sy
+
+  ## Re-initialize keyring
+  # As keyring is initialized at boot and copied to the install directory with pacstrap
+  # while NTP is running, time changed after keyring initialization. This leads to mal-
+  # function. Keyring must be re-initialized properly to be able to sign archzfs key.
   rm -Rf /etc/pacman.d/gnupg
   pacman-key --init
   pacman-key --populate archlinux
   pacman-key --recv-keys F75D9D76 --keyserver keyserver.ubuntu.com
   pacman-key --lsign-key F75D9D76
   pacman -S archlinux-keyring --noconfirm
-  cat >> /etc/pacman.conf <<"EOSF"
+  cat >> /etc/pacman.conf <<EOSF
+
 [archzfs]
 Server = http://archzfs.com/archzfs/x86_64
 Server = http://mirror.sum7.eu/archlinux/archzfs/archzfs/x86_64
 Server = https://mirror.biocrafting.net/archlinux/archzfs/archzfs/x86_64
 EOSF
+
   pacman -Syu --noconfirm zfs-dkms zfs-utils
 
   # Sync clock
   hwclock --systohc
 
+  # Set date
+  ln -sf /usr/share/zoneinfo/Europe/Stockholm /etc/localtime
+  # Setting date/time in chroot causes errors.
+  #timedatectl set-ntp true
+  #timedatectl set-timezone Europe/Stockholm
+  systemctl enable systemd-timesyncd.service
+
   # Generate locale
   locale-gen
   source /etc/locale.conf
 
-  # Generate Initramfs
+  # Generate initramfs
   mkinitcpio -P
 
-  # Install ZFSBootMenu and deps
+  # Install ZFSBootMenu and dependencies
   git clone --depth=1 https://github.com/zbm-dev/zfsbootmenu/ /tmp/zfsbootmenu
   pacman -S cpanminus kexec-tools fzf util-linux --noconfirm
   cd /tmp/zfsbootmenu
@@ -131,10 +201,19 @@ EOSF
   make install
   cpanm --notest --installdeps .
 
+  # Create group for SSH access
+  groupadd --gid=2000 sshusers
+
+  # Configure networking
+  pacman -S --noconfirm networkmanager openssh
+  systemctl enable NetworkManager.service
+  systemctl enable sshd.service
+
   # Create user
-  zfs create zroot/data/home/${user}
-  useradd -m ${user} -G wheel
-  chown -R ${user}:${user} /home/${user}
+  useradd ${user} -M -g users -G wheel,sshusers -s /bin/bash
+  cp -a /etc/skel/. /home/${user}
+  chown -R ${user}:users /home/${user}
+  chmod 700 /home/${user}
 
 EOF
 
@@ -148,57 +227,9 @@ arch-chroot /mnt /bin/passwd "$user"
 
 # Configure sudo
 print "Configure sudo"
-cat > /mnt/etc/sudoers <<EOF
-root ALL=(ALL) ALL
-$user ALL=(ALL) ALL
-Defaults rootpw
-EOF
+sed -i "/%wheel ALL=(ALL:ALL) ALL/s/^# //" /mnt/etc/sudoers
 
-# Configure network
-print "Configure networking"
-cat > /mnt/etc/systemd/network/enoX.network <<"EOF"
-[Match]
-Name=en*
-
-[Network]
-DHCP=ipv4
-IPForward=yes
-
-[DHCP]
-UseDNS=no
-RouteMetric=10
-EOF
-cat > /mnt/etc/systemd/network/wlX.network <<"EOF"
-[Match]
-Name=wl*
-
-[Network]
-DHCP=ipv4
-IPForward=yes
-
-[DHCP]
-UseDNS=no
-RouteMetric=20
-EOF
-systemctl enable systemd-networkd --root=/mnt
-systemctl disable systemd-networkd-wait-online --root=/mnt
-
-mkdir /mnt/etc/iwd
-cat > /mnt/etc/iwd/main.conf <<"EOF"
-[General]
-UseDefaultInterface=true
-EnableNetworkConfiguration=true
-EOF
-systemctl enable iwd --root=/mnt
-
-# Configure DNS
-print "Configure DNS"
-rm /mnt/etc/resolv.conf
-ln -s /run/systemd/resolve/resolv.conf /mnt/etc/resolv.conf
-sed -i 's/^#DNS=.*/DNS=1.1.1.1/' /mnt/etc/systemd/resolved.conf
-systemctl enable systemd-resolved --root=/mnt
-
-# Activate zfs
+# Activate ZFS
 print "Configure ZFS"
 systemctl enable zfs-import-cache --root=/mnt
 systemctl enable zfs-mount --root=/mnt
@@ -213,17 +244,17 @@ zfs list -H -o name,mountpoint,canmount,atime,relatime,devices,exec,readonly,set
 systemctl enable zfs-zed.service --root=/mnt
 
 # Configure zfsbootmenu
-mkdir -p /mnt/efi/EFI/ZBM
+mkdir -p /mnt/efi/EFI/zbm
 
 # Generate zfsbootmenu efi
-print 'Configure zfsbootmenu'
+print 'Configure ZFSBootMenu'
 # https://github.com/zbm-dev/zfsbootmenu/blob/master/etc/zfsbootmenu/mkinitcpio.conf
 
-cat > /mnt/etc/zfsbootmenu/mkinitcpio.conf <<"EOF"
+cat > /mnt/etc/zfsbootmenu/mkinitcpio.conf <<EOF
 MODULES=()
-BINARIES=()
+BINARIES=(setfont)
 FILES=()
-HOOKS=(base udev autodetect modconf block keyboard keymap)
+HOOKS=(base udev autodetect modconf block keyboard keymap consolefont)
 COMPRESSION="zstd"
 EOF
 
@@ -232,29 +263,28 @@ Global:
   ManageImages: true
   BootMountPoint: /efi
   InitCPIO: true
-
 Components:
   Enabled: false
 EFI:
-  ImageDir: /efi/EFI/ZBM
+  ImageDir: /efi/EFI/zbm
   Versions: false
   Enabled: true
 Kernel:
-  CommandLine: ro quiet loglevel=0 zbm.import_policy=hostid
+  CommandLine: ro quiet loglevel=0 vt.global_cursor_default=0 zbm.import_policy=hostid
   Prefix: vmlinuz
 EOF
 
 # Set cmdline
-zfs set org.zfsbootmenu:commandline="rw quiet nowatchdog rd.vconsole.keymap=fr" zroot/ROOT/"$root_dataset"
+zfs set org.zfsbootmenu:commandline="rw quiet loglevel=0 systemd.show_status=auto rd.udev.log_level=3 vt.global_cursor_default=0 nowatchdog rd.vconsole.keymap=sv-latin1" zroot/ROOT/"$root_dataset"
 
 # Generate ZBM
-print 'Generate zbm'
-arch-chroot /mnt /bin/bash -xe <<"EOF"
+print 'Generate ZBM'
+arch-chroot /mnt /bin/bash -xe <<EOF
 
   # Export locale
-  export LANG="fr_FR.UTF-8"
+  export LANG="en_GB.UTF-8"
 
-  # Generate zfsbootmenu
+  # Generate ZFSBootMenu
   generate-zbm
 EOF
 
@@ -263,37 +293,37 @@ if [[ -f /tmp/disk ]]
 then
   DISK=$(cat /tmp/disk)
 else
-  print 'Select the disk you installed on:'
-  select ENTRY in $(ls /dev/disk/by-id/);
+  print 'Select disk the system is installed on:'
+  select ENTRY in $(ls "$DEVPATH");
   do
-      DISK="/dev/disk/by-id/$ENTRY"
+      DISK="$DEVPATH/$ENTRY"
       echo "Creating boot entries on $ENTRY."
       break
   done
 fi
 
 # Create UEFI entries
-print 'Create efi boot entries'
+print 'Create EFI boot entries'
 if ! efibootmgr | grep ZFSBootMenu
 then
     efibootmgr --disk "$DISK" \
       --part 1 \
       --create \
       --label "ZFSBootMenu Backup" \
-      --loader "\EFI\ZBM\vmlinuz-backup.efi" \
+      --loader "\EFI\zbm\vmlinuz-backup.efi" \
       --verbose
     efibootmgr --disk "$DISK" \
       --part 1 \
       --create \
       --label "ZFSBootMenu" \
-      --loader "\EFI\ZBM\vmlinuz.efi" \
+      --loader "\EFI\zbm\vmlinuz.efi" \
       --verbose
 else
     print 'Boot entries already created'
 fi
 
-# Umount all parts
-print "Umount all parts"
+# Umount all partitions
+print "Umount all partitions"
 umount /mnt/efi
 zfs umount -a
 
@@ -302,4 +332,4 @@ print "Export zpool"
 zpool export zroot
 
 # Finish
-echo -e "\e[32mAll OK"
+echo -e "\e[32mAll OK!"
