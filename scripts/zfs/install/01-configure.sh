@@ -16,7 +16,7 @@ ask () {
 menu () {
     PS3="> Choose a number: "
     select i in "$@"
-    do 
+    do
         echo "$i"
         break
     done
@@ -66,14 +66,14 @@ partition () {
     print "Creating EFI partition"
     sgdisk -n1:1M:+1G -t1:EF00 "$DISK"
     EFI="$DISK-part1"
-    
+
     # ZFS part
     print "Creating ZFS partition"
     sgdisk -n2:0:0 -t2:bf00 "$DISK"
-    
+
     # Inform kernel
     partprobe "$DISK"
-    
+
     # Format efi part
     sleep 1
     print "Format EFI partition"
@@ -92,11 +92,10 @@ zfs_passphrase () {
 create_pool () {
     # ZFS part
     ZFS="$DISK-part2"
-    
+
     # Create ZFS pool
     print "Create ZFS pool"
     zpool create -f -o ashift=12                          \
-                 -o autotrim=on                           \
                  -O acltype=posixacl                      \
                  -O compression=zstd                      \
                  -O relatime=on                           \
@@ -132,13 +131,13 @@ create_system_dataset () {
     zfs create                                        zroot/var/log
     zfs create -o mountpoint=/var/lib -o canmount=off zroot/var/lib
     zfs create                                        zroot/var/lib/libvirt
-    
+
 
     # Generate zfs hostid
     print "Generate hostid"
     zgenhostid
-    
-    # Set bootfs 
+
+    # Set bootfs
     print "Set ZFS bootfs"
     zpool set bootfs="zroot/ROOT/$1" zroot
 
@@ -168,7 +167,7 @@ mount_system () {
     print "Mount datasets"
     zfs mount zroot/ROOT/"$1"
     zfs mount -a
-    
+
     # Mount EFI part
     print "Mount EFI partition"
     EFI="$DISK-part1"

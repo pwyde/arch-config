@@ -6,7 +6,6 @@ A collection of scripts used to quickly deploy a minimal [Arch Linux](https://ww
 ### ZFS on root features
 - [Native encryption](https://wiki.archlinux.org/title/ZFS#Native_encryption) using `aes-256-gcm`
 - [ZStandard](https://en.wikipedia.org/wiki/Zstd) compression (`zstd`) on all datasets
-- Periodic [trimming](https://wiki.archlinux.org/title/ZFS#Enabling_TRIM) enabled (`autotrim=on`) on zpool.
 - [Boot environments](https://docs.zfsbootmenu.org/en/latest/guides/general/bootenvs-and-you.html) managed with [ZFSBootMenu](https://zfsbootmenu.org/)
   - `/boot` directory resides on ZFS
 - No swap volume/partition
