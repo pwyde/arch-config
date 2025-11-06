@@ -201,16 +201,13 @@ EOSF
   make install
   cpanm --notest --installdeps .
 
-  # Create group for SSH access
-  groupadd --gid=2000 sshusers
-
   # Configure networking
   pacman -S --noconfirm networkmanager openssh
   systemctl enable NetworkManager.service
   systemctl enable sshd.service
 
   # Create user
-  useradd ${user} -M -g users -G wheel,sshusers -s /bin/bash
+  useradd ${user} -M -g users -G wheel -s /bin/bash
   cp -a /etc/skel/. /home/${user}
   chown -R ${user}:users /home/${user}
   chmod 700 /home/${user}
