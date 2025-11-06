@@ -12,7 +12,7 @@ The [`01-configure.sh`](/scripts/zfs/install/01-configure.sh) script will automa
 
 The [`02-install.sh`](/scripts/zfs/install/01-configure.sh) script will automatically perform the following tasks:
 
-- Install and configure a bese [Arch Linux](https://www.archlinux.org/) system including [LTS Kernel](https://archlinux.org/packages/?search=&q=linux-lts).
+- Install and configure a base [Arch Linux](https://www.archlinux.org/) system including [LTS Kernel](https://archlinux.org/packages/?search=&q=linux-lts).
 - Generate [initramfs](https://wiki.archlinux.org/title/Arch_boot_process#initramfs).
 - Configure hostname, locales, keymap, network and more...
 - Install and configure [ZFSBootMenu](https://zfsbootmenu.org/) as [boot loader](https://wiki.archlinux.org/title/Arch_boot_process#Boot_loader) and will also manage [boot environments](https://docs.zfsbootmenu.org/en/latest/guides/general/bootenvs-and-you.html).
@@ -20,9 +20,9 @@ The [`02-install.sh`](/scripts/zfs/install/01-configure.sh) script will automati
 
 ## Usage
 
-[Download](https://archlinux.org/download/) and boot latest Arch Linux ISO.
+Installing Arch Linux on ZFS requires an installation medium with the ZFS modules. To build a custom ISO see [these](https://wiki.archlinux.org/title/Install_Arch_Linux_on_ZFS#Embedding_ZFS_module_into_custom_archiso) instructions.
 
-ZFS module must be loaded using the [archiso-zfs](https://github.com/eoli3n/archiso-zfs) script. It should work on any archiso version.
+Boot system with the newly created Arch Linux ISO.
 
 ```
 $ loadkeys sv-latin1
