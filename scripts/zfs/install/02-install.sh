@@ -224,7 +224,20 @@ arch-chroot /mnt /bin/passwd "$user"
 
 # Configure sudo
 print "Configure sudo"
-sed -i "/%wheel ALL=(ALL:ALL) ALL/s/^# //" /mnt/etc/sudoers
+
+cat > /mnt/etc/sudoers.d/timeout <<EOF
+# Disable password prompt timeout.
+Defaults passwd_timeout=0
+
+# Reset environment variables and timeout for sudo sessions to 60 min.
+Defaults timestamp_timeout=60
+EOF
+
+cat > /mnt/etc/sudoers.d/wheel <<EOF
+# Allow members of group wheel to execute any command.
+%wheel ALL=(ALL:ALL) ALL
+EOF
+
 
 # Activate ZFS
 print "Configure ZFS"
