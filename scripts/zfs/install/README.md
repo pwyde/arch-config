@@ -22,20 +22,14 @@ The [`02-install.sh`](/scripts/zfs/install/01-configure.sh) script will automati
 
 Installing Arch Linux on ZFS requires an installation medium with the ZFS modules. To build a custom ISO see [these](https://wiki.archlinux.org/title/Install_Arch_Linux_on_ZFS#Embedding_ZFS_module_into_custom_archiso) instructions.
 
-Boot system with the newly created Arch Linux ISO.
+Boot system with the newly created Arch Linux ISO and run scripts.
 
 ```
-$ loadkeys sv-latin1
-$ curl -s https://raw.githubusercontent.com/eoli3n/archiso-zfs/master/init | bash -s -- -v
-```
-
-Download and run scripts.
-
-```
-$ git clone https://github.com/pwyde/arch-config
-$ cd arch-config/scripts/zfs/install
-$ ./01-configure.sh
-$ ./02-install.sh
+loadkeys sv-latin1
+git clone https://github.com/pwyde/arch-config
+cd arch-config/scripts/zfs/install
+./01-configure.sh
+./02-install.sh
 ```
 
 ## Debug
@@ -43,12 +37,12 @@ $ ./02-install.sh
 Run scripts in debug mode with commands below.
 
 ```
-$ ./01-configure.sh debug
-$ ./02-install.sh debug
+./01-configure.sh debug
+./02-install.sh debug
 ```
 
 ## List EFI content
 
 ```
-$ sudo lsinitcpio /efi/EFI/ZBM/*
+sudo lsinitcpio /efi/EFI/ZBM/*
 ```
