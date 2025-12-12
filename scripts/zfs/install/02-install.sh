@@ -262,9 +262,9 @@ print 'Configure ZFSBootMenu'
 
 cat > /mnt/etc/zfsbootmenu/mkinitcpio.conf <<EOF
 MODULES=()
-BINARIES=(setfont)
+BINARIES=()
 FILES=()
-HOOKS=(base udev autodetect modconf block keyboard keymap consolefont)
+HOOKS=(base udev autodetect modconf block keyboard keymap)
 COMPRESSION="zstd"
 EOF
 
@@ -280,12 +280,12 @@ EFI:
   Versions: false
   Enabled: true
 Kernel:
-  CommandLine: ro quiet loglevel=0 vt.global_cursor_default=0 zbm.import_policy=hostid
+  CommandLine: ro quiet loglevel=0 vt.global_cursor_default=0 rd.vconsole.font=ter-132b zbm.import_policy=hostid
   Prefix: vmlinuz
 EOF
 
 # Set cmdline
-zfs set org.zfsbootmenu:commandline="rw quiet loglevel=0 systemd.show_status=auto rd.udev.log_level=3 vt.global_cursor_default=0 nowatchdog rd.vconsole.keymap=sv-latin1" zroot/ROOT/"$root_dataset"
+zfs set org.zfsbootmenu:commandline="rw quiet loglevel=0 systemd.show_status=auto rd.udev.log_level=3 vt.global_cursor_default=0 nowatchdog rd.vconsole.keymap=sv-latin1 rd.vconsole.font=ter-132b" zroot/ROOT/"$root_dataset"
 
 # Generate ZBM
 print 'Generate ZBM'
