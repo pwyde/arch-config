@@ -163,15 +163,14 @@ arch-chroot /mnt /bin/bash -xe <<EOF
   rm -Rf /etc/pacman.d/gnupg
   pacman-key --init
   pacman-key --populate archlinux
-  pacman-key --recv-keys F75D9D76 --keyserver keyserver.ubuntu.com
-  pacman-key --lsign-key F75D9D76
+  pacman-key --recv-keys 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9 --keyserver keyserver.ubuntu.com
+  pacman-key --lsign-key 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9
   pacman -S archlinux-keyring --noconfirm
   cat >> /etc/pacman.conf <<EOSF
 
 [archzfs]
-Server = http://archzfs.com/archzfs/x86_64
-Server = http://mirror.sum7.eu/archlinux/archzfs/archzfs/x86_64
-Server = https://mirror.biocrafting.net/archlinux/archzfs/archzfs/x86_64
+SigLevel = Required
+Server = https://github.com/archzfs/archzfs/releases/download/experimental
 EOSF
 
   pacman -Syu --noconfirm zfs-dkms zfs-utils
